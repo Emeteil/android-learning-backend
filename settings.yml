@@ -1,0 +1,34 @@
+host: "0.0.0.0"
+port: 80
+
+logging:
+  log_dir: "logs"
+
+users_json_path: "database/users.json"
+
+environment_variables:
+  - "flask_secret"
+
+user_data_settings:
+  length:
+    nickname: [3, 32]
+    password: [8, 128]
+  requirements:
+    password:
+      uppercase: true
+      lowercase: true
+      digit: true
+      special_char: true
+  regex:
+    email: "[^@]+@[^@]+\\.[^@]+"
+    special_chars: "[!@#$%^&*(),.?\":{}|<>]"
+
+mobile_network_data:
+  data_dir: "database/mobile_network_data"
+  file_extension: ".txt"
+  default_page: 1
+  default_count: 100
+  max_count: 1000
+
+load_dotenv: true
+debug: true

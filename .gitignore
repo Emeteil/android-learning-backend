@@ -1,2 +1,7 @@
 ../a.out
 a.out
+.env
+__pycache__/
+*.disable
+database/
+logs/
