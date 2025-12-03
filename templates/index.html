@@ -20,13 +20,22 @@
       </p>
     </div>
 
-    <nav>
-      <ul>
-        <li>
-          <a href="/login">Войти</a>
-        </li>
-      </ul>
-    </nav>
+    <hr />
+
+    <div>
+      <div>
+        <select id="user-select"></select>
+        <button onclick="GetUserData()">Получить данные</button>
+      </div>
+      <textarea id="api-data" rows="15" cols="80" readonly></textarea>
+    </div>
+
+    <hr />
+
+    <div>
+      <h3>WebSocket messages:</h3>
+      <div id="websocket-data"></div>
+    </div>
 
     <script>
       const nickname = '{{ nickname }}' || 'Гость'
@@ -36,6 +45,70 @@
       document.getElementById('nickname').textContent = nickname
       document.getElementById('user-id').textContent = user_id
       document.getElementById('reg-time').textContent = reg_time
+      
+      let ws = null
+      const wsDataDiv = document.getElementById('websocket-data')
+      const apiDataTextarea = document.getElementById('api-data')
+      const userSelect = document.getElementById('user-select')
+      
+      function connectWebSocket() {
+        ws = new WebSocket(`ws://${window.location.host}/api/mobile-network/ws`)
+      
+        ws.onopen = function () {
+          AddWebSocketMessage('WebSocket подключен')
+        }
+      
+        ws.onmessage = function (event) {
+          AddWebSocketMessage(event.data)
+        }
+      
+        ws.onerror = function () {
+          AddWebSocketMessage('Ошибка WebSocket')
+        }
+      
+        ws.onclose = function () {
+          AddWebSocketMessage('WebSocket отключен')
+          document.getElementById('ws-toggle').textContent = 'Подключить WebSocket'
+        }
+      }
+      
+      function AddWebSocketMessage(message) {
+        wsDataDiv.innerHTML += `<div>${message}</div>`
+        wsDataDiv.scrollTop = wsDataDiv.scrollHeight
+      }
+      
+      function LoadUsers() {
+        fetch('/api/mobile-network/users')
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.status === 'success') {
+              data.data.users.forEach((user) => {
+                if (user.nickname) {
+                  const option = document.createElement('option')
+                  option.value = user.user_id
+                  option.textContent = user.nickname
+                  userSelect.appendChild(option)
+                }
+              })
+            }
+          })
+      }
+      
+      function GetUserData() {
+        const userId = userSelect.value
+        let url = '/api/mobile-network/data?count=10'
+      
+        if (userId) url += `&user_id=${userId}`
+      
+        fetch(url)
+          .then((response) => response.json())
+          .then((data) => {
+            apiDataTextarea.value = JSON.stringify(data, null, 2)
+          })
+      }
+      
+      LoadUsers()
+      connectWebSocket()
     </script>
   </body>
 </html>

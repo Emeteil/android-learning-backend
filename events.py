@@ -8,11 +8,11 @@ import os
 @app.route("/favicon")
 @app.route("/favicon.ico")
 @app.route("/favicon.png")
-async def favicon():
+def favicon():
     return send_file("static/images/favicon.png")
 
 @app.errorhandler(Exception)
-async def handle_error(error):
+def handle_error(error):
     status_code = getattr(error, 'code', 500)
     data = getattr(error, 'data', None)
     status_code_data = status_codes[status_code].copy() if status_code in status_codes else None

@@ -13,16 +13,14 @@ import events
 @app.route("/")
 def mainPage():
     logged, payload = is_logged("cookies")
-    if logged:
-        return render_template("index.html", **payload, logged = logged)
-    return redirect(url_for("loginPage"))
+    return render_template("index.html", **payload, logged = logged)
 
-@app.route("/login")
-def loginPage():
-    logged, payload = is_logged("cookies")
-    if logged:
-        return redirect(url_for("mainPage"))
-    return render_template("login.html")
+# @app.route("/login")
+# def loginPage():
+#     logged, payload = is_logged("cookies")
+#     if logged:
+#         return redirect(url_for("mainPage"))
+#     return render_template("login.html")
 
 if __name__ == '__main__':
     app.run(
