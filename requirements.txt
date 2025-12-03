@@ -1,5 +1,10 @@
-Flask>=3.0.3
-Flask_Limiter>=3.5.0
-python-dotenv>=1.0.1
-flask-sock>=0.7.0
-PyYAML>=6.0
+beartype==0.22.8
+cachetools==5.3.3
+Flask==3.1.2
+Flask_Limiter==3.5.0
+flask_sock==0.7.0
+PyJWT==2.10.1
+python-dotenv==1.2.1
+PyYAML==6.0.2
+shortuuid==1.0.13
+Werkzeug==3.1.4

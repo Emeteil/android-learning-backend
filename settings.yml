@@ -31,4 +31,4 @@ mobile_network_data:
   max_count: 1000
 
 load_dotenv: true
-debug: true
+debug: false

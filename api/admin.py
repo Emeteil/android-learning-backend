@@ -9,7 +9,7 @@ def ping_server():
 
 @app.route("/api/admin/loged_ping", methods=['GET'])
 @login_required("cookies")
-def loged_ping_server():
+def loged_ping_server(payload):
     return apiResponse({"message": "Pong!"})
 
 @app.route("/error_page", methods=['GET'])
