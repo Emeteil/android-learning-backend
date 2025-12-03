@@ -47,7 +47,7 @@ def get_user_mobile_data(
             return []
         
         with open(file_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+            lines = f.readlines()[::-1]
         
         total_lines = len(lines)
         start_index = (page - 1) * count
