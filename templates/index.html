@@ -1,114 +1,118 @@
 <!DOCTYPE html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Main</title>
-  </head>
-  <body>
-    <h1>Тест</h1>
 
-    <div id="user-info">
-      <p>
-        Вы вошли как: <span id="nickname">...</span>
-      </p>
-      <p>
-        ID пользователя: <span id="user-id">...</span>
-      </p>
-      <p>
-        Время регистрации: <span id="reg-time">...</span>
-      </p>
-    </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="{{ url_for('static', path='/styles/main_style.css') }}" />
+  <title>Main</title>
+</head>
 
-    <hr />
+<body>
+  <h1>Тест</h1>
 
+  <div id="user-info">
+    <p>
+      Вы вошли как: <span id="nickname">...</span>
+    </p>
+    <p>
+      ID пользователя: <span id="user-id">...</span>
+    </p>
+    <p>
+      Время регистрации: <span id="reg-time">...</span>
+    </p>
+  </div>
+
+  <hr />
+
+  <div>
     <div>
-      <div>
-        <select id="user-select"></select>
-        <button onclick="GetUserData()">Получить данные</button>
-      </div>
-      <textarea id="api-data" rows="15" cols="80" readonly></textarea>
+      <select id="user-select"></select>
+      <button onclick="GetUserData()">Получить данные</button>
     </div>
+    <textarea id="api-data" rows="15" cols="80" readonly></textarea>
+  </div>
 
-    <hr />
+  <hr />
 
-    <div>
-      <h3>WebSocket messages:</h3>
-      <div id="websocket-data"></div>
-    </div>
+  <div>
+    <h3>WebSocket messages:</h3>
+    <div id="websocket-data"></div>
+  </div>
 
-    <script>
-      const nickname = '{{ nickname }}' || 'Гость'
-      const user_id = '{{ user_id }}' || 'неизвестен'
-      const reg_time = '{{ exp }}' || 'неизвестно'
-      
-      document.getElementById('nickname').textContent = nickname
-      document.getElementById('user-id').textContent = user_id
-      document.getElementById('reg-time').textContent = reg_time
-      
-      let ws = null
-      const wsDataDiv = document.getElementById('websocket-data')
-      const apiDataTextarea = document.getElementById('api-data')
-      const userSelect = document.getElementById('user-select')
-      
-      function connectWebSocket() {
-        ws = new WebSocket(`ws://${window.location.host}/api/mobile-network/ws`)
-      
-        ws.onopen = function () {
-          AddWebSocketMessage('WebSocket подключен')
-        }
-      
-        ws.onmessage = function (event) {
-          AddWebSocketMessage(event.data)
-        }
-      
-        ws.onerror = function () {
-          AddWebSocketMessage('Ошибка WebSocket')
-        }
-      
-        ws.onclose = function () {
-          AddWebSocketMessage('WebSocket отключен')
-          document.getElementById('ws-toggle').textContent = 'Подключить WebSocket'
-        }
+  <script>
+    const nickname = '{{ nickname }}' || 'Гость'
+    const user_id = '{{ user_id }}' || 'неизвестен'
+    const reg_time = '{{ exp }}' || 'неизвестно'
+
+    document.getElementById('nickname').textContent = nickname
+    document.getElementById('user-id').textContent = user_id
+    document.getElementById('reg-time').textContent = reg_time
+
+    let ws = null
+    const wsDataDiv = document.getElementById('websocket-data')
+    const apiDataTextarea = document.getElementById('api-data')
+    const userSelect = document.getElementById('user-select')
+
+    function connectWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}/api/mobile-network/ws`)
+
+      ws.onopen = function () {
+        AddWebSocketMessage('WebSocket подключен')
       }
-      
-      function AddWebSocketMessage(message) {
-        wsDataDiv.innerHTML += `<div>${message}</div>`
-        wsDataDiv.scrollTop = wsDataDiv.scrollHeight
+
+      ws.onmessage = function (event) {
+        AddWebSocketMessage(event.data)
       }
-      
-      function LoadUsers() {
-        fetch('/api/mobile-network/users')
-          .then((response) => response.json())
-          .then((data) => {
-            if (data.status === 'success') {
-              data.data.users.forEach((user) => {
-                if (user.nickname) {
-                  const option = document.createElement('option')
-                  option.value = user.user_id
-                  option.textContent = user.nickname
-                  userSelect.appendChild(option)
-                }
-              })
-            }
-          })
+
+      ws.onerror = function () {
+        AddWebSocketMessage('Ошибка WebSocket')
       }
-      
-      function GetUserData() {
-        const userId = userSelect.value
-        let url = '/api/mobile-network/data?count=10'
-      
-        if (userId) url += `&user_id=${userId}`
-      
-        fetch(url)
-          .then((response) => response.json())
-          .then((data) => {
-            apiDataTextarea.value = JSON.stringify(data, null, 2)
-          })
+
+      ws.onclose = function () {
+        AddWebSocketMessage('WebSocket отключен')
       }
-      
-      LoadUsers()
-      connectWebSocket()
-    </script>
-  </body>
+    }
+
+    function AddWebSocketMessage(message) {
+      wsDataDiv.innerHTML += `<div>${message}</div>`
+      wsDataDiv.scrollTop = wsDataDiv.scrollHeight
+    }
+
+    function LoadUsers() {
+      fetch('/api/mobile-network/users')
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.status === 'success') {
+            data.data.users.forEach((user) => {
+              if (user.nickname) {
+                const option = document.createElement('option')
+                option.value = user.user_id
+                option.textContent = user.nickname
+                userSelect.appendChild(option)
+              }
+            })
+          }
+        })
+    }
+
+    function GetUserData() {
+      const userId = userSelect.value
+      let url = '/api/mobile-network/data?count=10'
+
+      if (userId) url += `&user_id=${userId}`
+
+      fetch(url)
+        .then((response) => response.json())
+        .then((data) => {
+          apiDataTextarea.value = JSON.stringify(data, null, 2)
+        })
+    }
+
+    LoadUsers()
+    connectWebSocket()
+  </script>
+</body>
+
 </html>

@@ -1,6 +1,10 @@
-from utils.api_response import *
-from flask import request
+from fastapi import APIRouter, Request, Depends, Response
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
+from utils.api_response import *
+from utils.api_models import *
+from api.schemas.authorization import *
 from authorization import *
 from utils.validation.user_data import (
     validate_register_data,
@@ -12,15 +16,25 @@ from utils.db.users import (
     get_user_by_nickname,
     create_user
 )
-from settings import *
+from settings import app, limiter
 
-@app.route("/api/authorization/register", methods=["POST"])
+router = APIRouter(prefix="/api/authorization", tags=["Authorization"])
+
+@router.post(
+    "/register", 
+    response_model=ApiResponse[AuthResponse],
+    status_code=201,
+    summary="Register a new user",
+    description="Creates a new user and sets an HTTP-only token cookie.",
+    responses={
+        201: {"model": ApiResponse[AuthResponse]},
+        400: {"model": ApiErrorResponse}
+    }
+)
 @limiter.limit("10 per 2 minute")
-def api_register():
-    data = request.get_json()
-    
-    nickname: str = data.get("nickname")
-    password: str = data.get("password")
+async def api_register(request: Request, response: Response, data: RegisterRequest):
+    nickname: str = data.nickname
+    password: str = data.password
 
     errors = validate_register_data(
         nickname,
@@ -42,26 +56,35 @@ def api_register():
     
     token = generate_token(user_id, nickname)
     
-    response = apiResponse({
+    res = apiResponse({
         "message": "User registered successfully",
         "user_id": user_id,
         "nickname": nickname,
         "preferred_redirect": "/"
     }, 201)
     
-    response[0].set_cookie("token", token, httponly=True, secure=True, samesite="Strict")
+    res.set_cookie("token", token, httponly=True, secure=True, samesite="Strict")
     
-    return response
+    return res
 
-@app.route("/api/authorization/login", methods=["POST"])
+@router.post(
+    "/login", 
+    response_model=ApiResponse[AuthResponse],
+    summary="User authorization",
+    description="Verifies credentials and sets a token cookie.",
+    responses={
+        200: {"model": ApiResponse[AuthResponse]},
+        400: {"model": ApiErrorResponse},
+        401: {"model": ApiErrorResponse}
+    }
+)
 @limiter.limit("6 per 3 minute")
-def api_login():
-    data = request.get_json()
-    nickname = data.get("nickname")[:NICKNAME_LENGTH[1]]
-    password = data.get("password")[:PASSWORD_LENGTH[1]]
+async def api_login(request: Request, response: Response, data: LoginRequest):
+    nickname = data.nickname[:NICKNAME_LENGTH[1]]
+    password = data.password[:PASSWORD_LENGTH[1]]
 
     if not nickname or not password:
-        raise ApiError(400, 'Need “nickname” and “password” in data!')
+        raise ApiError(400, "Need “nickname” and “password” in data!")
 
     user = get_user_by_nickname(nickname)
     
@@ -70,23 +93,34 @@ def api_login():
     
     token: str = generate_token(user["id"], user["nickname"])
     
-    response = apiResponse({
+    res = apiResponse({
         "message": "Login successful",
         "user_id": user["id"],
         "nickname": user["nickname"],
         "preferred_redirect": "/"
     }, 200)
     
-    response[0].set_cookie("token", token)
+    res.set_cookie("token", token)
     
-    return response
+    return res
 
-@app.route("/api/authorization/request_api_key", methods=["POST"])
+@router.post(
+    "/request_api_key", 
+    response_model=ApiResponse[TokenResponse],
+    status_code=201,
+    summary="Request API key",
+    description="Generates a new JWT token for an authorized user.",
+    responses={
+        201: {"model": ApiResponse[TokenResponse]},
+        401: {"model": ApiErrorResponse}
+    }
+)
 @limiter.limit("5 per 30 minute")
-@login_required()
-def api_request_api_key(payload):
+async def api_request_api_key(request: Request, payload: dict = Depends(login_required_headers)):
     token: str = generate_token(payload["user_id"], payload["nickname"])
     
     return apiResponse({
         "token": token
     }, 201)
+
+app.include_router(router)

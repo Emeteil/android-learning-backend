@@ -4,10 +4,16 @@ port: 5678
 logging:
   log_dir: "logs"
 
+cors:
+  allow_origins: ["*"]
+  allow_credentials: true
+  allow_methods: ["*"]
+  allow_headers: ["*"]
+
 users_json_path: "database/users.json"
 
 environment_variables:
-  - "flask_secret"
+  - "secret_key"
 
 user_data_settings:
   length:
@@ -23,12 +29,12 @@ user_data_settings:
     email: "[^@]+@[^@]+\\.[^@]+"
     special_chars: "[!@#$%^&*(),.?\":{}|<>]"
 
+load_dotenv: true
+debug: false
+
 mobile_network_data:
   data_dir: "database/mobile_network_data"
   file_extension: ".txt"
   default_page: 1
   default_count: 100
   max_count: 1000
-
-load_dotenv: true
-debug: false

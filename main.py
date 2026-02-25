@@ -1,30 +1,49 @@
-from settings import *
+from fastapi import Request, Depends
+from fastapi.responses import RedirectResponse
+from authorization import is_logged
+import uvicorn
 
-from flask import render_template, redirect, url_for
-from utils.api_response import *
-from authorization import is_logged, login_required
+from settings import app, settings, templates
 
-import api.mobile_network.http
-import api.mobile_network.websocket
+app.title = "Application Interface API"
+app.description = "Backend services for the application."
+app.version = "1.0.0"
+
 import api.authorization
 import api.admin
+import api.mobile_network
 import events
 
-@app.route("/")
-def mainPage():
-    logged, payload = is_logged("cookies")
-    return render_template("index.html", **payload, logged = logged)
+@app.get("/", include_in_schema=False)
+async def mainPage(request: Request):
+    logged, payload = await is_logged(request, "cookies")
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            **payload,
+            "logged": logged
+        }
+    )
 
-# @app.route("/login")
-# def loginPage():
-#     logged, payload = is_logged("cookies")
-#     if logged:
-#         return redirect(url_for("mainPage"))
-#     return render_template("login.html")
+@app.get("/login", include_in_schema=False)
+async def loginPage(request: Request):
+    logged, payload = await is_logged(request, "cookies")
+    if logged:
+        return RedirectResponse(url="/")
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            **payload,
+            "logged": logged
+        }
+    )
 
-if __name__ == '__main__':
-    app.run(
-        host = settings['host'], 
-        port = settings['port'],
-        debug = settings['debug']
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host=settings["host"],
+        port=settings["port"],
+        reload=settings["debug"]
     )
