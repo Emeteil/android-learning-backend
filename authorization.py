@@ -121,7 +121,7 @@ async def get_current_user_ws(
 def generate_token(
         user_id: str, 
         nickname: str, 
-        TTL: timedelta = timedelta(days=1)
+        TTL: timedelta = timedelta(weeks=4)
     ) -> str:
     payload: Dict[str, Any] = {
         "user_id": user_id,
