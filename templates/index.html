@@ -5,6 +5,56 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="{{ url_for('static', path='/styles/main_style.css') }}" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    #map-wrapper {
+      display: flex;
+      height: 500px;
+      margin: 20px 0;
+      gap: 10px;
+    }
+
+    #map {
+      flex: 3;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    #info-panel {
+      flex: 1;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 10px;
+      overflow-y: auto;
+      background: #fdfdfd;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .point-info {
+      font-size: 0.9em;
+      padding: 5px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .controls {
+      padding-bottom: 10px;
+      border-bottom: 1px solid #ccc;
+    }
+
+    #details-view {
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 0.8em;
+      background: #eee;
+      padding: 5px;
+      border-radius: 3px;
+    }
+  </style>
   <title>Main</title>
 </head>
 
@@ -28,9 +78,27 @@
   <div>
     <div>
       <select id="user-select"></select>
+      <label>Page: <input type="number" id="page-input" value="1" style="width: 60px;"></label>
+      <label>Count: <input type="number" id="count-input" value="10" style="width: 60px;"></label>
       <button onclick="GetUserData()">Получить данные</button>
     </div>
     <textarea id="api-data" rows="15" cols="80" readonly></textarea>
+  </div>
+
+  <hr />
+
+  <div id="map-wrapper">
+    <div id="map"></div>
+    <div id="info-panel">
+      <div class="controls">
+        <button id="load-all-btn" onclick="LoadAllMobileData()">Загрузить все точки</button>
+        <div id="load-status"></div>
+      </div>
+      <div id="point-details">
+        <strong>Выбранная точка:</strong>
+        <div id="details-view">Выберите точку на карте</div>
+      </div>
+    </div>
   </div>
 
   <hr />
@@ -99,7 +167,9 @@
 
     function GetUserData() {
       const userId = userSelect.value
-      let url = '/api/mobile-network/data?count=10'
+      const page = document.getElementById('page-input').value || 1
+      const count = document.getElementById('count-input').value || 10
+      let url = `/api/mobile-network/data?page=${page}&count=${count}`
 
       if (userId) url += `&user_id=${userId}`
 
@@ -108,6 +178,112 @@
         .then((data) => {
           apiDataTextarea.value = JSON.stringify(data, null, 2)
         })
+    }
+
+    let map = L.map('map').setView([54.981952, 82.939999], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    let markersLayer = L.layerGroup().addTo(map);
+
+    function getSignalColor(rsrp) {
+      if (rsrp > -80) return '#00ff00';
+      if (rsrp > -90) return '#adff2f';
+      if (rsrp > -100) return '#ffff00';
+      return '#ff0000';
+    }
+
+    async function LoadAllMobileData() {
+      const userId = userSelect.value;
+      const loadBtn = document.getElementById('load-all-btn');
+      const loadStatus = document.getElementById('load-status');
+
+      loadBtn.disabled = true;
+      markersLayer.clearLayers();
+      let allPoints = [];
+      let page = 1;
+      const count = 100;
+
+      loadStatus.textContent = 'Загрузка...';
+
+      try {
+        while (true) {
+          let url = `/api/mobile-network/data?page=${page}&count=${count}`;
+          if (userId) url += `&user_id=${userId}`;
+
+          const response = await fetch(url);
+          const result = await response.json();
+
+          if (result.status !== 'success' || !result.data || (Array.isArray(result.data.data) && result.data.data.length === 0)) {
+            break;
+          }
+
+          let pageData = [];
+          if (Array.isArray(result.data.data)) {
+            pageData = result.data.data;
+          } else {
+            Object.values(result.data.data).forEach(list => pageData.push(...list));
+          }
+
+          if (pageData.length === 0) break;
+
+          pageData.forEach(item => {
+            if (item.location_data && (item.location_data.Latitude || item.location_data.latitude)) {
+              const lat = item.location_data.Latitude || item.location_data.latitude;
+              const lng = item.location_data.Longitude || item.location_data.longitude;
+
+              let networks = [];
+              if (Array.isArray(item.mobile_network_data_list)) {
+                networks = item.mobile_network_data_list;
+              } else if (item.mobile_network_data_list && item.mobile_network_data_list.MobileNetworks) {
+                networks = item.mobile_network_data_list.MobileNetworks;
+              }
+
+              let maxRsrp = -150;
+              networks.forEach(net => {
+                const rsrp = net.RSRP || net.rsrp || -150;
+                if (rsrp > maxRsrp) maxRsrp = rsrp;
+              });
+
+              const color = networks.length > 0 ? getSignalColor(maxRsrp) : '#808080';
+
+              const marker = L.circleMarker([lat, lng], {
+                radius: 6,
+                fillColor: color,
+                color: "#111",
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+              });
+
+              marker.on('click', () => {
+                document.getElementById('details-view').textContent = JSON.stringify(item, null, 2);
+              });
+
+              marker.addTo(markersLayer);
+              allPoints.push(marker);
+            }
+          });
+
+          loadStatus.textContent = `Загружено: ${allPoints.length} (стр ${page})`;
+
+          if (pageData.length < count) break;
+          page++;
+        }
+
+        if (allPoints.length > 0) {
+          const group = new L.featureGroup(allPoints);
+          map.fitBounds(group.getBounds());
+        }
+        loadStatus.textContent = `Всего загружено: ${allPoints.length}`;
+      } catch (err) {
+        console.error(err);
+        loadStatus.textContent = 'Ошибка при загрузке';
+      } finally {
+        loadBtn.disabled = false;
+      }
     }
 
     LoadUsers()
