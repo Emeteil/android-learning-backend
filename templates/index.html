@@ -20,13 +20,13 @@
     #map {
       flex: 3;
       border: 1px solid #ccc;
-      border-radius: 4px;
+      border-radius: 5px;
     }
 
     #info-panel {
       flex: 1;
       border: 1px solid #ccc;
-      border-radius: 4px;
+      border-radius: 5px;
       padding: 10px;
       overflow-y: auto;
       background: #fdfdfd;
@@ -132,6 +132,10 @@
 
       ws.onmessage = function (event) {
         AddWebSocketMessage(event.data)
+        try {
+          const data = JSON.parse(event.data)
+          if (data && data.location_data) addMarkerToMap(data)
+        } catch (e) { }
       }
 
       ws.onerror = function () {
@@ -189,10 +193,48 @@
     let markersLayer = L.layerGroup().addTo(map);
 
     function getSignalColor(rsrp) {
-      if (rsrp > -80) return '#00ff00';
-      if (rsrp > -90) return '#adff2f';
-      if (rsrp > -100) return '#ffff00';
-      return '#ff0000';
+      const minRsrp = -120;
+      const maxRsrp = -70;
+
+      let t = Math.max(0, Math.min(1, (rsrp - minRsrp) / (maxRsrp - minRsrp)));
+      return `hsl(${t * 0.333 * 360}, 100%, 50%)`;
+    }
+
+    function addMarkerToMap(item) {
+      if (!item.location_data || !(item.location_data.Latitude || item.location_data.latitude)) return;
+      const lat = item.location_data.Latitude || item.location_data.latitude;
+      const lng = item.location_data.Longitude || item.location_data.longitude;
+
+      let networks = [];
+      if (Array.isArray(item.mobile_network_data_list)) {
+        networks = item.mobile_network_data_list;
+      } else if (item.mobile_network_data_list && item.mobile_network_data_list.MobileNetworks) {
+        networks = item.mobile_network_data_list.MobileNetworks;
+      }
+
+      let maxRsrp = -150;
+      networks.forEach(net => {
+        const rsrp = net.RSRP || net.rsrp || -150;
+        if (rsrp > maxRsrp) maxRsrp = rsrp;
+      });
+
+      const color = networks.length > 0 ? getSignalColor(maxRsrp) : '#808080';
+
+      const marker = L.circleMarker([lat, lng], {
+        radius: 6.5,
+        fillColor: color,
+        weight: 1,
+        color: '#111',
+        opacity: 0.3,
+        fillOpacity: 0.6
+      });
+
+      marker.on('click', () => {
+        document.getElementById('details-view').textContent = JSON.stringify(item, null, 2);
+      });
+
+      marker.addTo(markersLayer);
+      return marker;
     }
 
     async function LoadAllMobileData() {
@@ -204,7 +246,7 @@
       markersLayer.clearLayers();
       let allPoints = [];
       let page = 1;
-      const count = 100;
+      const count = 250;
 
       loadStatus.textContent = 'Загрузка...';
 
@@ -230,41 +272,8 @@
           if (pageData.length === 0) break;
 
           pageData.forEach(item => {
-            if (item.location_data && (item.location_data.Latitude || item.location_data.latitude)) {
-              const lat = item.location_data.Latitude || item.location_data.latitude;
-              const lng = item.location_data.Longitude || item.location_data.longitude;
-
-              let networks = [];
-              if (Array.isArray(item.mobile_network_data_list)) {
-                networks = item.mobile_network_data_list;
-              } else if (item.mobile_network_data_list && item.mobile_network_data_list.MobileNetworks) {
-                networks = item.mobile_network_data_list.MobileNetworks;
-              }
-
-              let maxRsrp = -150;
-              networks.forEach(net => {
-                const rsrp = net.RSRP || net.rsrp || -150;
-                if (rsrp > maxRsrp) maxRsrp = rsrp;
-              });
-
-              const color = networks.length > 0 ? getSignalColor(maxRsrp) : '#808080';
-
-              const marker = L.circleMarker([lat, lng], {
-                radius: 6,
-                fillColor: color,
-                color: "#111",
-                weight: 1,
-                opacity: 1,
-                fillOpacity: 0.8
-              });
-
-              marker.on('click', () => {
-                document.getElementById('details-view').textContent = JSON.stringify(item, null, 2);
-              });
-
-              marker.addTo(markersLayer);
-              allPoints.push(marker);
-            }
+            const marker = addMarkerToMap(item);
+            if (marker) allPoints.push(marker);
           });
 
           loadStatus.textContent = `Загружено: ${allPoints.length} (стр ${page})`;
