@@ -30,9 +30,7 @@ def init_db():
                     id VARCHAR(50) PRIMARY KEY,
                     nickname VARCHAR(100) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
-                    time_registration DOUBLE PRECISION NOT NULL,
-                    email VARCHAR(255),
-                    full_name VARCHAR(255)
+                    time_registration DOUBLE PRECISION NOT NULL
                 );
             """)
             

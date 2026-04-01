@@ -18,7 +18,7 @@ def get_users() -> Dict[str, Dict[str, Union[str, List[str]]]]:
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            cur.execute("SELECT id, nickname, password_hash, time_registration, email, full_name FROM users")
+            cur.execute("SELECT id, nickname, password_hash, time_registration FROM users")
             rows = cur.fetchall()
             users = {}
             for row in rows:
@@ -28,10 +28,6 @@ def get_users() -> Dict[str, Dict[str, Union[str, List[str]]]]:
                     "password_hash": row['password_hash'],
                     "time_registration": row['time_registration']
                 }
-                if row.get('email'):
-                    user_dict['email'] = row['email']
-                if row.get('full_name'):
-                    user_dict['full_name'] = row['full_name']
                 users[row['id']] = user_dict
         conn.close()
         return users
@@ -49,7 +45,7 @@ def _get_user_by_id(user_id: str) -> Optional[Dict[str, Union[str, List[str], fl
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+            cur.execute("SELECT id, nickname, password_hash, time_registration FROM users WHERE id = %s", (user_id,))
             row = cur.fetchone()
         conn.close()
         
@@ -60,10 +56,6 @@ def _get_user_by_id(user_id: str) -> Optional[Dict[str, Union[str, List[str], fl
                 "password_hash": row['password_hash'],
                 "time_registration": row['time_registration']
             }
-            if row.get('email'):
-                user_dict['email'] = row['email']
-            if row.get('full_name'):
-                user_dict['full_name'] = row['full_name']
             return user_dict
         return None
     except Exception as e:
@@ -96,7 +88,7 @@ def _get_user_by_nickname(nickname: str) -> Optional[Dict[str, Union[str, List[s
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM users WHERE nickname = %s", (nickname,))
+            cur.execute("SELECT id, nickname, password_hash, time_registration FROM users WHERE nickname = %s", (nickname,))
             row = cur.fetchone()
         conn.close()
         
@@ -107,10 +99,6 @@ def _get_user_by_nickname(nickname: str) -> Optional[Dict[str, Union[str, List[s
                 "password_hash": row['password_hash'],
                 "time_registration": row['time_registration']
             }
-            if row.get('email'):
-                user_dict['email'] = row['email']
-            if row.get('full_name'):
-                user_dict['full_name'] = row['full_name']
             return user_dict
         return None
     except Exception as e:
@@ -178,9 +166,7 @@ def delete_user(user_id: str):
 def update_user(
     user_id: str,
     nickname: Optional[str] = None,
-    password_hash: Optional[str] = None,
-    email: Optional[str] = None,
-    full_name: Optional[str] = None
+    password_hash: Optional[str] = None
 ) -> None:
     updates = []
     params = []
@@ -191,12 +177,6 @@ def update_user(
     if password_hash is not None:
         updates.append("password_hash = %s")
         params.append(password_hash)
-    if email is not None:
-        updates.append("email = %s")
-        params.append(email)
-    if full_name is not None:
-        updates.append("full_name = %s")
-        params.append(full_name)
     
     if not updates:
         return
