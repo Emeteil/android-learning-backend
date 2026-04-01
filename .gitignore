@@ -6,3 +6,7 @@ __pycache__/
 database/
 logs/
 .venv/
+
+apply_migration.py
+generate_migration.py
+migration.sql

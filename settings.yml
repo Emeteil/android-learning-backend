@@ -14,6 +14,7 @@ users_json_path: "database/users.json"
 
 environment_variables:
   - "secret_key"
+  - "db_password"
 
 user_data_settings:
   length:
@@ -38,3 +39,10 @@ mobile_network_data:
   default_page: 1
   default_count: 100
   max_count: 1000
+
+database:
+  host: "94.159.111.243"
+  port: "5432"
+  name: "mobile_data"
+  user: "mobile_data_user"
+  password: ""

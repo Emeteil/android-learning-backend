@@ -1,16 +1,8 @@
 from typing import Dict, List, Optional, Any
 from beartype import beartype
-from settings import settings
 import json
-import os
 
-MOBILE_DATA_DIR = settings["mobile_network_data"]["data_dir"]
-FILE_EXTENSION = settings["mobile_network_data"]["file_extension"]
-
-@beartype
-def _get_user_file_path(user_id: str) -> str:
-    os.makedirs(MOBILE_DATA_DIR, exist_ok=True)
-    return os.path.join(MOBILE_DATA_DIR, f"{user_id}{FILE_EXTENSION}")
+from utils.db.connection import get_db_connection
 
 @beartype
 def save_mobile_network_data(
@@ -19,19 +11,35 @@ def save_mobile_network_data(
     location_data: Optional[Dict[str, Any]] = None
 ) -> bool:
     try:
-        data = {
-            "mobile_network_data_list": mobile_network_data_list or {},
-            "location_data": location_data or {}
-        }
+        conn = get_db_connection()
         
-        file_path = _get_user_file_path(user_id)
+        latitude = location_data.get('Latitude') if location_data else None
+        longitude = location_data.get('Longitude') if location_data else None
+        altitude = location_data.get('Altitude') if location_data else None
+        loc_time = location_data.get('Time') if location_data else None
         
-        with open(file_path, "a", encoding="utf-8") as f:
-            json_str = json.dumps(data, ensure_ascii=False)
-            f.write(json_str + "\n")
-        
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO mobile_data (
+                    user_id, mobile_network_data_list, 
+                    latitude, longitude, altitude, time
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    user_id,
+                    json.dumps(mobile_network_data_list) if mobile_network_data_list else None,
+                    latitude,
+                    longitude,
+                    altitude,
+                    loc_time
+                )
+            )
+        conn.close()
         return True
-    except Exception:
+    except Exception as e:
+        print(f"Database Error: {e}")
         return False
 
 @beartype
@@ -41,46 +49,57 @@ def get_user_mobile_data(
     count: int = 100
 ) -> List[Dict[str, Any]]:
     try:
-        file_path = _get_user_file_path(user_id)
-        
-        if not os.path.exists(file_path):
-            return []
-        
-        with open(file_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()[::-1]
-        
-        total_lines = len(lines)
-        start_index = (page - 1) * count
-        end_index = min(start_index + count, total_lines)
-        
-        if start_index >= total_lines or start_index < 0:
-            return []
-        
-        data = []
-        for line in lines[start_index:end_index]:
-            try:
-                data.append(json.loads(line.strip()))
-            except json.JSONDecodeError:
-                continue
-        
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            offset = (page - 1) * count
+            cur.execute(
+                """
+                SELECT mobile_network_data_list, latitude, longitude, altitude, time 
+                FROM mobile_data 
+                WHERE user_id = %s 
+                ORDER BY id DESC 
+                LIMIT %s OFFSET %s
+                """,
+                (user_id, count, offset)
+            )
+            rows = cur.fetchall()
+            
+            data = []
+            for row in rows:
+                loc_data = {}
+                if row['latitude'] is not None:
+                    loc_data['Latitude'] = row['latitude']
+                if row['longitude'] is not None:
+                    loc_data['Longitude'] = row['longitude']
+                if row['altitude'] is not None:
+                    loc_data['Altitude'] = row['altitude']
+                if row['time'] is not None:
+                    loc_data['Time'] = row['time']
+                    
+                item = {
+                    "mobile_network_data_list": row['mobile_network_data_list'] or {},
+                    "location_data": loc_data
+                }
+                data.append(item)
+                
+        conn.close()
         return data
-    except Exception:
+    except Exception as e:
+        print(f"Database Error: {e}")
         return []
 
 @beartype
 def get_all_users_with_data() -> List[str]:
     try:
-        if not os.path.exists(MOBILE_DATA_DIR):
-            return []
-        
-        user_ids = []
-        for filename in os.listdir(MOBILE_DATA_DIR):
-            if filename.endswith(FILE_EXTENSION):
-                user_id = filename[:-len(FILE_EXTENSION)]
-                user_ids.append(user_id)
-        
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT user_id FROM mobile_data")
+            rows = cur.fetchall()
+            user_ids = [row['user_id'] for row in rows]
+        conn.close()
         return user_ids
-    except Exception:
+    except Exception as e:
+        print(f"Database Error: {e}")
         return []
 
 @beartype
@@ -95,7 +114,6 @@ def get_all_mobile_data(
         
         all_data = {}
         total_users = len(user_ids)
-        
         start_index = (page - 1) * count
         end_index = min(start_index + count, total_users)
         
@@ -108,20 +126,21 @@ def get_all_mobile_data(
                 all_data[user_id] = user_data
         
         return all_data
-    except Exception:
+    except Exception as e:
+        print(f"Database Error: {e}")
         return {}
 
 @beartype
 def delete_user_mobile_data(user_id: str) -> bool:
     try:
-        file_path = _get_user_file_path(user_id)
-        
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            return True
-        
-        return False
-    except Exception:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM mobile_data WHERE user_id = %s", (user_id,))
+            affected = cur.rowcount
+        conn.close()
+        return affected > 0
+    except Exception as e:
+        print(f"Database Error: {e}")
         return False
 
 @beartype

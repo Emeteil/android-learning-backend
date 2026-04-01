@@ -1,60 +1,80 @@
 from typing import Dict, List, Optional, Union, Iterable
 from cachetools import cached, TTLCache
 from beartype import beartype
-from settings import settings
 from threading import Lock
 import shortuuid
-import json, os
 import time
+import logging
 
 from utils.db.cache_manager import users_cache, clear_cache
-
-lock = Lock()
-
-if not os.path.isfile(settings["users_json_path"]):
-    os.makedirs(os.path.dirname(settings["users_json_path"]), exist_ok=True)
-    with open(settings["users_json_path"], "w", encoding="utf-8") as f:
-        f.write("{}")
+from utils.db.connection import get_db_connection
 
 def _generate_user_id() -> str:
     return f"user_{shortuuid.uuid()}"
 
-@beartype
-def _load_users() -> Dict[str, Dict[str, Union[str, List[str]]]]:
-    with lock:
-        try:
-            with open(settings["users_json_path"], "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
-
-@beartype
-def _save_users(data: Dict[str, Dict[str, Union[str, List[str]]]]) -> None:
-    with lock:
-        with open(settings["users_json_path"], "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-        clear_cache()
-
 @cached(users_cache["get_users"])
 @beartype
 def get_users() -> Dict[str, Dict[str, Union[str, List[str]]]]:
-    return _load_users()
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, nickname, password_hash, time_registration, email, full_name FROM users")
+            rows = cur.fetchall()
+            users = {}
+            for row in rows:
+                user_dict = {
+                    "id": row['id'],
+                    "nickname": row['nickname'],
+                    "password_hash": row['password_hash'],
+                    "time_registration": row['time_registration']
+                }
+                if row.get('email'):
+                    user_dict['email'] = row['email']
+                if row.get('full_name'):
+                    user_dict['full_name'] = row['full_name']
+                users[row['id']] = user_dict
+        conn.close()
+        return users
+    except Exception as e:
+        logging.error(f"Database Error: {e}")
+        return {}
 
 @beartype
 def update_users(data: Dict[str, Dict[str, Union[str, List[str]]]]) -> None:
-    _save_users(data)
+    pass
 
 @cached(users_cache["_get_user_by_id"])
 @beartype
-def _get_user_by_id(user_id: str) -> Optional[Dict[str, Union[str, List[str]]]]:
-    users = get_users()
-    return users.get(user_id)
+def _get_user_by_id(user_id: str) -> Optional[Dict[str, Union[str, List[str], float]]]:
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+            row = cur.fetchone()
+        conn.close()
+        
+        if row:
+            user_dict = {
+                "id": row['id'],
+                "nickname": row['nickname'],
+                "password_hash": row['password_hash'],
+                "time_registration": row['time_registration']
+            }
+            if row.get('email'):
+                user_dict['email'] = row['email']
+            if row.get('full_name'):
+                user_dict['full_name'] = row['full_name']
+            return user_dict
+        return None
+    except Exception as e:
+        logging.error(f"Database Error: {e}")
+        return None
 
 @beartype
 def get_user_by_id(
     user_id: str,
     keys: Optional[Iterable[str]] = None
-) -> Optional[Dict[str, Union[str, List[str]]]]:
+) -> Optional[Dict[str, Union[str, List[str], float]]]:
     user = _get_user_by_id(user_id)
     
     if not user:
@@ -65,24 +85,43 @@ def get_user_by_id(
     
     data = {}
     for key in keys:
-        data[key] = user[key]
+        if key in user:
+            data[key] = user[key]
     
     return data
 
 @cached(users_cache["_get_user_by_nickname"])
 @beartype
-def _get_user_by_nickname(nickname: str) -> Optional[Dict[str, Union[str, List[str]]]]:
-    users = get_users()
-    return next(
-        (user for user in users.values() if user["nickname"] == nickname),
-        None
-    )
+def _get_user_by_nickname(nickname: str) -> Optional[Dict[str, Union[str, List[str], float]]]:
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM users WHERE nickname = %s", (nickname,))
+            row = cur.fetchone()
+        conn.close()
+        
+        if row:
+            user_dict = {
+                "id": row['id'],
+                "nickname": row['nickname'],
+                "password_hash": row['password_hash'],
+                "time_registration": row['time_registration']
+            }
+            if row.get('email'):
+                user_dict['email'] = row['email']
+            if row.get('full_name'):
+                user_dict['full_name'] = row['full_name']
+            return user_dict
+        return None
+    except Exception as e:
+        logging.error(f"Database Error: {e}")
+        return None
 
 @beartype
 def get_user_by_nickname(
     nickname: str,
     keys: Optional[Iterable[str]] = None
-) -> Optional[Dict[str, Union[str, List[str]]]]:
+) -> Optional[Dict[str, Union[str, List[str], float]]]:
     user = _get_user_by_nickname(nickname)
     
     if not user:
@@ -93,7 +132,8 @@ def get_user_by_nickname(
     
     data = {}
     for key in keys:
-        data[key] = user[key]
+        if key in user:
+            data[key] = user[key]
     
     return data
 
@@ -102,26 +142,37 @@ def create_user(
     nickname: str,
     password_hash: str,
 ) -> str:
-    users = get_users()
     user_id = _generate_user_id()
+    time_reg = time.time()
     
-    users[user_id] = {
-        "id": user_id,
-        "nickname": nickname,
-        "password_hash": password_hash,
-        "time_registration": time.time(),
-    }
-    _save_users(users)
-    
-    return user_id
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO users (id, nickname, password_hash, time_registration)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (user_id, nickname, password_hash, time_reg)
+            )
+        conn.close()
+        clear_cache()
+        return user_id
+    except Exception as e:
+        logging.error(f"Database Error: {e}")
+        raise
 
 @beartype
 def delete_user(user_id: str):
-    users = get_users()
-    
-    del users[user_id]
-    
-    _save_users(users)
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        conn.close()
+        clear_cache()
+    except Exception as e:
+        logging.error(f"Database Error: {e}")
+        raise
 
 @beartype
 def update_user(
@@ -131,17 +182,34 @@ def update_user(
     email: Optional[str] = None,
     full_name: Optional[str] = None
 ) -> None:
-    users = get_users()
-    if user_id not in users:
-        raise ValueError("User not found")
+    updates = []
+    params = []
     
     if nickname is not None:
-        users[user_id]["nickname"] = nickname
+        updates.append("nickname = %s")
+        params.append(nickname)
     if password_hash is not None:
-        users[user_id]["password_hash"] = password_hash
+        updates.append("password_hash = %s")
+        params.append(password_hash)
     if email is not None:
-        users[user_id]["email"] = email
+        updates.append("email = %s")
+        params.append(email)
     if full_name is not None:
-        users[user_id]["full_name"] = full_name
+        updates.append("full_name = %s")
+        params.append(full_name)
     
-    _save_users(users)
+    if not updates:
+        return
+        
+    query = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
+    params.append(user_id)
+    
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute(query, tuple(params))
+        conn.close()
+        clear_cache()
+    except Exception as e:
+        logging.error(f"Database Error: {e}")
+        raise
