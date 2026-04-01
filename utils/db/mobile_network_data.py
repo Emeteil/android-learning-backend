@@ -57,7 +57,7 @@ def get_user_mobile_data(
                 SELECT mobile_network_data_list, latitude, longitude, altitude, time 
                 FROM mobile_data 
                 WHERE user_id = %s 
-                ORDER BY id DESC 
+                ORDER BY time DESC NULLS LAST 
                 LIMIT %s OFFSET %s
                 """,
                 (user_id, count, offset)

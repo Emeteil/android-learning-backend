@@ -49,6 +49,8 @@ def init_db():
                 );
             """)
             
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_mobile_data_user_time ON mobile_data(user_id, time DESC NULLS LAST);")
+            
             cur.execute("CREATE INDEX IF NOT EXISTS idx_mobile_data_user_id ON mobile_data(user_id);")
 
         conn.close()
