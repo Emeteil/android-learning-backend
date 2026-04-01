@@ -133,8 +133,10 @@
       ws.onmessage = function (event) {
         AddWebSocketMessage(event.data)
         try {
-          const data = JSON.parse(event.data)
-          if (data && data.location_data) addMarkerToMap(data)
+          const parsedData = JSON.parse(event.data)
+          Object.values(parsedData).forEach(item => {
+            if (item && item.location_data) addMarkerToMap(item)
+          })
         } catch (e) { }
       }
 
